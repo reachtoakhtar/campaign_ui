@@ -25,27 +25,28 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
     justifyItems: 'left',
-    marginLeft: '10px'
+    margin: '10px'
   },
   formContainer: {
-    marginTop: '85px',
     width: '60%',
-    height: '80vh',
+    height: 'auto',
     borderRadius: '30px',
     backgroundColor: '#fcf7f7',
     boxShadow: '10px 10px 5px #e8e6e6',
+    padding: '10px'
   },
    contentContainer: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: '-340px',
-    marginTop: '85px',
     width: '135%',
-    height: '80vh',
+    height: 'auto',
     borderRadius: '30px',
     backgroundColor: '#fcf7f7',
     boxShadow: '10px 10px 5px #e8e6e6',
+    padding: '10px'
+
   },
   divContainer: {
     alignContent: 'center',
@@ -76,11 +77,11 @@ const App: React.FC = () => {
   // const [isFileDisplay, setisFileDisplay] = useState<boolean>(false);
   const [prompt, setPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isLoading, setisLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isError, setisError] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
-  const [mailsubject, setmailsubject] = useState<string>('');
-  const [mailcontent, setmailcontent] = useState<string>('');
+  const [mailSubject, setMailSubject] = useState<string>('');
+  const [mailContent, setMailContent] = useState<string>('');
   const [isEmailSending, setisEmailSending] = useState<boolean>(false);
 
   const [messages, setMessages] = useState<Array<string>>([]);
@@ -120,17 +121,17 @@ const App: React.FC = () => {
 
         websckt.send(JSON.stringify(formData));
         websckt.onmessage = (e) => {
+          setIsLoading(true);
           const message = JSON.parse(e.data);
-          if(message.hasOwnProperty('image')){
-            setImageUrl(message?.image);
-          }
-          else if(message.hasOwnProperty('mailSubject')) {
-            setmailsubject(message?.mailSubject);
-          }
-          else if(message.hasOwnProperty('mailContent')) {
-            setmailcontent(message?.mailContent);
+          if(message.hasOwnProperty('response')){
+              setMessages(message.response);
+              console.log('message', message)
           } else {
-            setMessages(message.response);
+            console.log('image', message)
+            setIsLoading(false);
+            setImageUrl(message?.image);
+            setMailSubject(message?.mailSubject);
+            setMailContent(message?.mailContent);
           }
        }
       } else {
@@ -147,10 +148,8 @@ const App: React.FC = () => {
 
       const formData = new FormData();
 
-      console.log(mailsubject, mailcontent, imageUrl);
-
-      formData.append('subject', mailsubject);
-      formData.append('body', mailcontent);
+      formData.append('subject', mailSubject);
+      formData.append('body', mailContent);
       formData.append('image', imageUrl);
       setisEmailSending(true);
       const response = await axios.post(BASE_URL + 'send-mail', formData);
@@ -233,8 +232,16 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {imageUrl.length  
+        {isLoading  
         ? (<div className={styles.divContainer}>
+            {messages}
+            <div className='bouncingLoader'>
+              <div></div>
+              <div></div>
+              <div></div>
+            </div>
+          </div>)
+        : (imageUrl && (<div className={styles.divContainer}>
             <h3>
               Generated Image:{' '}
               <Button
@@ -253,18 +260,17 @@ const App: React.FC = () => {
             />
             <br />
             <br />
-            {mailsubject && mailcontent && (
-              <>
+              <div>
                 <label htmlFor='mailSubject'>
                   <strong>Mail Subject:</strong>{' '}
                 </label>
                 <br />
                 <input
                   type='text'
-                  id='mailsubject'
-                  name='mailsubject'
-                  value={mailsubject}
-                  size={mailsubject.length}
+                  id='mailSubject'
+                  name='mailSubject'
+                  value={mailSubject}
+                  size={mailSubject.length}
                   readOnly
                 />
                 <br />
@@ -274,10 +280,10 @@ const App: React.FC = () => {
                 </label>
 
                 <textarea
-                  id='mailcontent'
-                  name='mailcontent'
-                  value={mailcontent}
-                  rows={mailcontent.split('.').length}
+                  id='mailContent'
+                  name='mailContent'
+                  value={mailContent}
+                  rows={mailContent.split('.').length}
                   cols={100}
                   readOnly
                 />
@@ -292,22 +298,8 @@ const App: React.FC = () => {
                 >
                   Send Email
                 </Button>
-              </>
-            )}
-            {!mailsubject && !mailcontent && (
-              <Caption2>
-                !! Mail subject and content could not be generated.
-              </Caption2>
-            )}
-          </div>)
-        : (<div className={styles.divContainer}>
-            {messages}
-            <div className='bouncingLoader'>
-              <div></div>
-              <div></div>
-              <div></div>
-            </div>
-          </div>)}
+              </div>
+          </div>))}
       </div>
     </div>
   )
