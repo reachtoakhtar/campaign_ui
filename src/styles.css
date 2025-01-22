@@ -28,3 +28,17 @@
 .bouncingLoader > div:nth-child(3) {
   animation-delay: 0.4s;
 }
+
+ul li:before {
+  content: '\2713';
+  display: inline-block;
+  color: green;
+  padding: 0 6px 0 0;
+}
+
+ul li {
+  margin-left: -40px;
+  margin-bottom: 20px;
+  list-style-type: none;
+  font-size: 1em;
+}

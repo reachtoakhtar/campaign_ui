@@ -7,14 +7,20 @@ import {
   makeStyles,
   shorthands,
   Text,
-  Spinner,
   Image,
   Field,
-  Caption2,
   Toaster,
   useToastController,
   ToastTitle,
   Toast,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Checkbox
 } from '@fluentui/react-components';
 
 import axios from 'axios';
@@ -78,23 +84,51 @@ const App: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isFileProcessing, setIsFileProcessing] = useState<boolean>(false);
   const [isError, setisError] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [mailSubject, setMailSubject] = useState<string>('');
   const [mailContent, setMailContent] = useState<string>('');
   const [isEmailSending, setisEmailSending] = useState<boolean>(false);
+  const [modalOpen, setModalOpen] = useState<boolean>(false);
+  const [features, setFeatures] = useState<Array<{key:string, value:string, id:number}>>([]);
+  const [checkedFeatures, setCheckedFeatures] = useState<Array<number>>([]);
 
-  const [messages, setMessages] = useState<Array<string>>([]);
+  const [message, setMessage] = useState<string>('');
   const [websckt, setWebsckt] = useState<WebSocket | null>(null);
 
   const PORT = import.meta.env.VITE_PORT;
   const BASE_URL = import.meta.env.VITE_BASE_URL.replace('VITE_PORT', PORT);
   const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL.replace('VITE_PORT', PORT);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files ? event.target.files[0] : null;
     setFile(uploadedFile);
-    // setisFileDisplay(true);
+
+    const formData = new FormData();
+    if (uploadedFile) formData.append("file", uploadedFile);
+    try {
+      setIsFileProcessing(true);
+      setIsLoading(true);
+      setMessage('Fetching details from file.')
+      const response = await axios.post(BASE_URL + 'file-process', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      const featureList: Array<{key:string, value:string, id:number}> = [];
+      const responseData = response.data
+      Object.keys(responseData).forEach((k, idx)=>{
+        featureList.push({key: k, value: responseData[k], id:idx})
+      })
+      setFeatures(featureList)
+      setModalOpen(true)
+    } catch (e){
+      console.log('Error extracting file.')
+    } finally {
+      setIsFileProcessing(false);
+      setIsLoading(false);
+    }
   };
 
   const handleResetFields = () => {
@@ -124,10 +158,8 @@ const App: React.FC = () => {
           setIsLoading(true);
           const message = JSON.parse(e.data);
           if(message.hasOwnProperty('response')){
-              setMessages(message.response);
-              console.log('message', message)
+              setMessage(message.response);
           } else {
-            console.log('image', message)
             setIsLoading(false);
             setImageUrl(message?.image);
             setMailSubject(message?.mailSubject);
@@ -153,7 +185,6 @@ const App: React.FC = () => {
       formData.append('image', imageUrl);
       setisEmailSending(true);
       const response = await axios.post(BASE_URL + 'send-mail', formData);
-      console.log({ response });
       setisEmailSending(false);
       dispatchToast(
         <Toast>
@@ -165,6 +196,47 @@ const App: React.FC = () => {
       console.log('Error while submitting form -- ', err);
     }
   };
+
+  const handleFileProcess = async (event: React.FormEvent) => {
+    try {
+      event.preventDefault();
+
+      const formData = new FormData();
+
+      formData.append('subject', mailSubject);
+      formData.append('body', mailContent);
+      formData.append('image', imageUrl);
+      setisEmailSending(true);
+      const response = await axios.post(BASE_URL + 'file-process', formData);
+      setisEmailSending(false);
+      dispatchToast(
+        <Toast>
+          <ToastTitle>Email sent successfully.</ToastTitle>
+        </Toast>,
+        { position: 'top-end', intent: 'success' }
+      );
+    } catch (err) {
+      console.log('Error while submitting form -- ', err);
+    }
+  };
+
+  const handleFeatureCheck = (event: React.FormEvent, id:number) => {
+    if(event?.target?.checked){
+      setCheckedFeatures([...checkedFeatures, id])
+    } else {
+      const chkdFeatures = [...checkedFeatures]
+      const index = chkdFeatures.indexOf(id)
+      chkdFeatures.splice(index, 1)
+      setCheckedFeatures(chkdFeatures)
+    }
+  };
+
+  const handleCancel = (event: React.FormEvent) => {
+    setModalOpen(false); 
+    setFeatures([]);
+    setCheckedFeatures([])
+    setFile(null)
+  }
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URL);
@@ -208,7 +280,22 @@ const App: React.FC = () => {
               Choose File
             </Button>
           </div>
+
           {file && <Label>Uploaded File: {file.name}</Label>}
+
+          {checkedFeatures.length > 0 && (
+            <>
+              <h2 style={{marginBottom: '0'}}>Selected Features:</h2>
+              <ul>
+                {checkedFeatures.map(id=>(
+                  <li key={id}>
+                    <b>{features?.filter(obj=>obj.id===id)[0]?.key}:</b><br />
+                    <span style={{marginLeft: '40px '}}>{features?.filter(obj=>obj.id===id)[0]?.value}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           <div className={styles.buttonContainer}>
             <Button appearance='primary' type='submit' disabled={isLoading}>
@@ -223,7 +310,6 @@ const App: React.FC = () => {
       </div>
 
       <div className={styles.contentContainer}>
-        {/* {isLoading && <Spinner appearance='primary' label='Generating Image' />} */}
         {isError && (
           <div style={{ marginTop: '200px' }}>
             <p style={{ color: 'red' }}>
@@ -234,7 +320,7 @@ const App: React.FC = () => {
 
         {isLoading  
         ? (<div className={styles.divContainer}>
-            {messages}
+            {message}
             <div className='bouncingLoader'>
               <div></div>
               <div></div>
@@ -299,8 +385,37 @@ const App: React.FC = () => {
                   Send Email
                 </Button>
               </div>
-          </div>))}
+          </div>)
+        )}
       </div>
+
+      <Dialog modalType="modal" open={modalOpen}>
+        <DialogSurface aria-describedby={undefined}>
+          <DialogBody>
+            <DialogTitle>Select from below features</DialogTitle>
+            <DialogContent>
+              {features.map(obj => (
+                <Checkbox
+                key={obj.id}
+                checked={checkedFeatures.includes(obj.id)}
+                onChange={e=>handleFeatureCheck(e, obj.id)}
+                label= {<span><b>{obj.key}:</b> {obj.value}</span>}
+              />
+              ))}
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="primary" onClick={e=>setModalOpen(false)}>
+                  Use Parameters
+                </Button>
+              </DialogTrigger>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary" onClick={handleCancel}>Cancel</Button>
+              </DialogTrigger>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   )
 };
