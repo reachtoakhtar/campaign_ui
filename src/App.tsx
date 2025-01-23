@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   useId,
   Button,
@@ -84,7 +84,6 @@ const App: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isFileProcessing, setIsFileProcessing] = useState<boolean>(false);
   const [isError, setisError] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [mailSubject, setMailSubject] = useState<string>('');
@@ -93,13 +92,15 @@ const App: React.FC = () => {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [features, setFeatures] = useState<Array<{key:string, value:string, id:number}>>([]);
   const [checkedFeatures, setCheckedFeatures] = useState<Array<number>>([]);
-
-  const [message, setMessage] = useState<string>('');
-  const [websckt, setWebsckt] = useState<WebSocket | null>(null);
+  const [featureData, setFeatureData] = useState<{} | null>(null);
+  const [filename, setFilename] = useState<string>('');
 
   const PORT = import.meta.env.VITE_PORT;
   const BASE_URL = import.meta.env.VITE_BASE_URL.replace('VITE_PORT', PORT);
   const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL.replace('VITE_PORT', PORT);
+  
+  const [ws, setWebsckt] = useState<WebSocket | null>(new WebSocket(WEBSOCKET_URL));
+  const [message, setMessage] = useState<string>('');  
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files ? event.target.files[0] : null;
@@ -108,7 +109,6 @@ const App: React.FC = () => {
     const formData = new FormData();
     if (uploadedFile) formData.append("file", uploadedFile);
     try {
-      setIsFileProcessing(true);
       setIsLoading(true);
       setMessage('Fetching details from file.')
       const response = await axios.post(BASE_URL + 'file-process', formData, {
@@ -117,7 +117,12 @@ const App: React.FC = () => {
         },
       });
       const featureList: Array<{key:string, value:string, id:number}> = [];
+      const filename = response.data.filename
+      setFilename(filename)
+      
       const responseData = response.data
+      delete responseData['filename']
+      setFeatureData(responseData)
       Object.keys(responseData).forEach((k, idx)=>{
         featureList.push({key: k, value: responseData[k], id:idx})
       })
@@ -126,14 +131,16 @@ const App: React.FC = () => {
     } catch (e){
       console.log('Error extracting file.')
     } finally {
-      setIsFileProcessing(false);
       setIsLoading(false);
     }
   };
 
   const handleResetFields = () => {
     setPrompt('');
-    // setisFileDisplay(false)
+    setModalOpen(false); 
+    setFeatures([]);
+    setCheckedFeatures([]);
+    setFile(null);
   };
 
   const handleDownload = () => {
@@ -144,33 +151,38 @@ const App: React.FC = () => {
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
+    setIsLoading(true);
+    setMessage('Connecting to server.')
+
     try {
       event.preventDefault();
       if (prompt) {
-        const formData = { prompt };
-        if (file) {
-          formData['filename'] = file.name;
-          websckt.send(file);
-        }
+        const formData = { prompt, filename };
 
-        websckt.send(JSON.stringify(formData));
-        websckt.onmessage = (e) => {
-          setIsLoading(true);
+        if(featureData){
+          formData['features'] = featureData
+        }
+        ws.send(JSON.stringify(formData));
+        ws.onmessage = (e) => {
           const message = JSON.parse(e.data);
           if(message.hasOwnProperty('response')){
-              setMessage(message.response);
+            setMessage(message.response);
+          } else if(!message.hasOwnProperty('image')){
+              setMessage(JSON.stringify(message));
           } else {
-            setIsLoading(false);
-            setImageUrl(message?.image);
-            setMailSubject(message?.mailSubject);
-            setMailContent(message?.mailContent);
+              setIsLoading(false);
+              setImageUrl(message?.image);
+              setMailSubject(message?.mailSubject);
+              setMailContent(message?.mailContent);
           }
-       }
+        }
       } else {
         alert('Please fill out prompt field.');
+        setIsLoading(false)
       }
     } catch (err) {
       console.log('Error while submitting form -- ', err);
+      setIsLoading(false)
     }
   };
 
@@ -185,29 +197,6 @@ const App: React.FC = () => {
       formData.append('image', imageUrl);
       setisEmailSending(true);
       const response = await axios.post(BASE_URL + 'send-mail', formData);
-      setisEmailSending(false);
-      dispatchToast(
-        <Toast>
-          <ToastTitle>Email sent successfully.</ToastTitle>
-        </Toast>,
-        { position: 'top-end', intent: 'success' }
-      );
-    } catch (err) {
-      console.log('Error while submitting form -- ', err);
-    }
-  };
-
-  const handleFileProcess = async (event: React.FormEvent) => {
-    try {
-      event.preventDefault();
-
-      const formData = new FormData();
-
-      formData.append('subject', mailSubject);
-      formData.append('body', mailContent);
-      formData.append('image', imageUrl);
-      setisEmailSending(true);
-      const response = await axios.post(BASE_URL + 'file-process', formData);
       setisEmailSending(false);
       dispatchToast(
         <Toast>
@@ -238,15 +227,10 @@ const App: React.FC = () => {
     setFile(null)
   }
 
-  useEffect(() => {
-    const ws = new WebSocket(WEBSOCKET_URL);
-    setWebsckt(ws);
-  }, []);
-
   return (
     <div className={styles.pageContainer}>
       <div className={styles.formContainer}>
-        <form onSubmit={handleSubmit} className={styles.form}>
+        <form className={styles.form}>
           <Text
             weight='bold'
             size={600}
@@ -298,7 +282,7 @@ const App: React.FC = () => {
           )}
 
           <div className={styles.buttonContainer}>
-            <Button appearance='primary' type='submit' disabled={isLoading}>
+            <Button appearance='primary' onClick={handleSubmit} disabled={isLoading}>
               Submit
             </Button>
 
@@ -318,7 +302,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {isLoading  
+        {isLoading 
         ? (<div className={styles.divContainer}>
             {message}
             <div className='bouncingLoader'>
@@ -327,7 +311,7 @@ const App: React.FC = () => {
               <div></div>
             </div>
           </div>)
-        : (imageUrl && (<div className={styles.divContainer}>
+        : (imageUrl?.length > 0 && (<div className={styles.divContainer}>
             <h3>
               Generated Image:{' '}
               <Button
