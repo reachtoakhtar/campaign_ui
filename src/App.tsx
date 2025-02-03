@@ -35,7 +35,7 @@ const useStyles = makeStyles({
   },
   formContainer: {
     width: '60%',
-    height: 'auto',
+    minHeight: '800px',
     borderRadius: '30px',
     backgroundColor: '#fcf7f7',
     boxShadow: '10px 10px 5px #e8e6e6',
@@ -47,7 +47,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     marginLeft: '-340px',
     width: '135%',
-    height: 'auto',
+    minHeight: '800px',
     borderRadius: '30px',
     backgroundColor: '#fcf7f7',
     boxShadow: '10px 10px 5px #e8e6e6',
@@ -80,7 +80,7 @@ const App: React.FC = () => {
   const { dispatchToast } = useToastController(toasterId);
   const styles = useStyles();
   const [file, setFile] = useState<File | null>(null);
-  // const [isFileDisplay, setisFileDisplay] = useState<boolean>(false);
+  const [logo, setLogo] = useState<File | null>(null);
   const [prompt, setPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -94,6 +94,7 @@ const App: React.FC = () => {
   const [checkedFeatures, setCheckedFeatures] = useState<Array<number>>([]);
   const [featureData, setFeatureData] = useState<{} | null>(null);
   const [filename, setFilename] = useState<string>('');
+  const [showLogoModal, setShowLogoModal] = useState<boolean>(false);
 
   const PORT = import.meta.env.VITE_PORT;
   const BASE_URL = import.meta.env.VITE_BASE_URL.replace('VITE_PORT', PORT);
@@ -135,6 +136,32 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedLogo = event.target.files ? event.target.files[0] : null;
+    setLogo(uploadedLogo);
+
+    const formData = new FormData();
+    if (uploadedLogo) {
+      formData.append("logo", uploadedLogo);
+      formData.append("image", imageUrl);
+    }
+    
+    try {
+      const response = await axios.post(BASE_URL + 'logo-process', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      const responseData = response.data
+      setImageUrl(responseData.image)
+      setShowLogoModal(false);
+    } catch (e){
+      console.log('Error processing logo.')
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleResetFields = () => {
     setPrompt('');
     setModalOpen(false); 
@@ -157,11 +184,23 @@ const App: React.FC = () => {
     try {
       event.preventDefault();
       if (prompt) {
-        const formData = { prompt, filename };
+        const formData = { prompt };
 
-        if(featureData){
-          formData['features'] = featureData
+        if(checkedFeatures.length){
+          const ftData: Array<{string:string}> = []
+
+          checkedFeatures.forEach(id => {
+            const featureList = features.filter(obj=>obj.id == id)
+            if (featureList.length) {
+              const k = featureList[0].key
+              const val = featureList[0].value
+              ftData.push({[k]: val})
+            }
+          }) 
+
+          formData['features'] = ftData
         }
+
         ws.send(JSON.stringify(formData));
         ws.onmessage = (e) => {
           const message = JSON.parse(e.data);
@@ -171,6 +210,7 @@ const App: React.FC = () => {
               setMessage(JSON.stringify(message));
           } else {
               setIsLoading(false);
+              setShowLogoModal(true);
               setImageUrl(message?.image);
               setMailSubject(message?.mailSubject);
               setMailContent(message?.mailContent);
@@ -225,6 +265,8 @@ const App: React.FC = () => {
     setFeatures([]);
     setCheckedFeatures([])
     setFile(null)
+
+    setShowLogoModal(false);
   }
 
   return (
@@ -304,7 +346,7 @@ const App: React.FC = () => {
 
         {isLoading 
         ? (<div className={styles.divContainer}>
-            {message}
+            <h1>{message}</h1>
             <div className='bouncingLoader'>
               <div></div>
               <div></div>
@@ -393,6 +435,35 @@ const App: React.FC = () => {
                   Use Parameters
                 </Button>
               </DialogTrigger>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary" onClick={handleCancel}>Cancel</Button>
+              </DialogTrigger>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog modalType="modal" open={showLogoModal}>
+        <DialogSurface aria-describedby={undefined}>
+          <DialogBody>
+            <DialogTitle>Upload Logo</DialogTitle>
+            <DialogContent>
+              <div style={{marginTop: '20px', marginBottom: '50px'}}>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  className={styles.fileInput}
+                  onChange={handleLogoUpload}
+                />
+                <Button
+                  appearance='primary'
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Choose File
+                </Button>
+              </div>
+            </DialogContent>
+            <DialogActions>
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="secondary" onClick={handleCancel}>Cancel</Button>
               </DialogTrigger>
