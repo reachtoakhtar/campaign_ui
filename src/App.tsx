@@ -92,8 +92,6 @@ const App: React.FC = () => {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [features, setFeatures] = useState<Array<{key:string, value:string, id:number}>>([]);
   const [checkedFeatures, setCheckedFeatures] = useState<Array<number>>([]);
-  const [featureData, setFeatureData] = useState<{} | null>(null);
-  const [filename, setFilename] = useState<string>('');
   const [showLogoModal, setShowLogoModal] = useState<boolean>(false);
 
   const PORT = import.meta.env.VITE_PORT;
@@ -117,13 +115,9 @@ const App: React.FC = () => {
           'Content-Type': 'multipart/form-data',
         },
       });
-      const featureList: Array<{key:string, value:string, id:number}> = [];
-      const filename = response.data.filename
-      setFilename(filename)
-      
+      const featureList: Array<{key:string, value:string, id:number}> = [];      
       const responseData = response.data
       delete responseData['filename']
-      setFeatureData(responseData)
       Object.keys(responseData).forEach((k, idx)=>{
         featureList.push({key: k, value: responseData[k], id:idx})
       })
@@ -346,11 +340,8 @@ const App: React.FC = () => {
 
         {isLoading 
         ? (<div className={styles.divContainer}>
-            <h1>{message}</h1>
-            <div className='bouncingLoader'>
-              <div></div>
-              <div></div>
-              <div></div>
+            <div className="bouncingLoader">{Array.from(message).map((ch, indx) => (
+              <span key={indx}>{ch}</span>))}
             </div>
           </div>)
         : (imageUrl?.length > 0 && (<div className={styles.divContainer}>
