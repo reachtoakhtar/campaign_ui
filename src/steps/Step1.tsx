@@ -17,7 +17,7 @@ const Step1: React.FC<Step1Props> = ({ prompt, setPrompt, styles }) => {
         value={prompt}
         rows={100}
         onChange={e => setPrompt(e.target.value)}
-        placeholder="Type your prompt here..."
+        placeholder="Enter your requirements..."
         size="medium"
         appearance="outline"
       />
